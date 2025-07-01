@@ -2,12 +2,55 @@ import React, { useEffect, useCallback, useState } from "react";
 import ReactPlayer from "react-player";
 import peer from "../service/peer";
 import { useSocket } from "../context/SocketProvider";
-
+import Vosk from "vosk-browser";
 const RoomPage = () => {
   const socket = useSocket();
   const [remoteSocketId, setRemoteSocketId] = useState(null);
   const [myStream, setMyStream] = useState();
   const [remoteStream, setRemoteStream] = useState();
+ const [recognizer, setRecognizer] = useState(null);
+  const [transcript, setTranscript] = useState("");
+
+useEffect(() => {
+  let cancelled = false;
+    (async () => {
+      const model = await Vosk.createModel("/model.tar.gz");
+       if (cancelled) return;
+      const rec = new model.KaldiRecognizer();
+      rec.on("partialresult", msg => {
+        console.log("Partial:", msg.result.partial);
+      });
+      rec.on("result", msg => {
+        setTranscript(prev => prev + " " + msg.result.text);
+      });
+      setRecognizer(rec);
+    })();
+     return () => {
+    cancelled = true;
+  };
+  }, []);
+
+   useEffect(() => {
+    if (!remoteStream || !recognizer) return;
+    const audioCtx = new AudioContext();
+    const src = audioCtx.createMediaStreamSource(remoteStream);
+    const proc = audioCtx.createScriptProcessor(4096, 1, 1);
+    proc.onaudioprocess = e => {
+      try {
+        recognizer.acceptWaveform(e.inputBuffer);
+      } catch (err) {
+        console.error("Vosk error:", err);
+      }
+    };
+    src.connect(proc);
+    proc.connect(audioCtx.destination);
+    return () => {
+      proc.disconnect();
+      src.disconnect();
+      audioCtx.close();
+    };
+  }, [remoteStream, recognizer]);
+
 
   const handleUserJoined = useCallback(({ email, id }) => {
     console.log(`Email ${email} joined room`);
@@ -139,6 +182,14 @@ const RoomPage = () => {
           />
         </>
       )}
+      {remoteStream && (
+        <>
+          <h3>Transcript:</h3>
+          <p>{transcript}</p>
+        </>
+      )}
+      {!recognizer && <p>Loading Vosk Model...</p>}
+
     </div>
   );
 };
