@@ -29,7 +29,8 @@ useEffect(() => {
 });
 
 
-      const rec = new model.KaldiRecognizer();
+      const rec = new model.KaldiRecognizer(16000);
+
       rec.on("partialresult", msg => console.log("Partial:", msg.result.partial));
       rec.on("result", msg => setTranscript(prev => prev + " " + msg.result.text));
 
