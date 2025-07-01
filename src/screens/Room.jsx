@@ -2,7 +2,7 @@ import React, { useEffect, useCallback, useState } from "react";
 import ReactPlayer from "react-player";
 import peer from "../service/peer";
 import { useSocket } from "../context/SocketProvider";
-import Vosk from "vosk-browser";
+
 const RoomPage = () => {
   const socket = useSocket();
   const [remoteSocketId, setRemoteSocketId] = useState(null);
@@ -11,24 +11,37 @@ const RoomPage = () => {
  const [recognizer, setRecognizer] = useState(null);
   const [transcript, setTranscript] = useState("");
 
+// Room.jsx (model-loading part)
+
 useEffect(() => {
-  let cancelled = false;
-    (async () => {
-      const model = await Vosk.createModel("/model.tar.gz");
-       if (cancelled) return;
+  (async () => {
+    if (!window.Vosk) {
+      console.error("Vosk not loaded – check script inclusion.");
+      return;
+    }
+
+    try {
+      console.log("Loading Vosk model...");
+      const model = await window.Vosk.createModel("model.tar.gz", {
+  sync: false,
+  fsSync: false,  
+  persistent: false 
+});
+
+
       const rec = new model.KaldiRecognizer();
-      rec.on("partialresult", msg => {
-        console.log("Partial:", msg.result.partial);
-      });
-      rec.on("result", msg => {
-        setTranscript(prev => prev + " " + msg.result.text);
-      });
+      rec.on("partialresult", msg => console.log("Partial:", msg.result.partial));
+      rec.on("result", msg => setTranscript(prev => prev + " " + msg.result.text));
+
       setRecognizer(rec);
-    })();
-     return () => {
-    cancelled = true;
-  };
-  }, []);
+    } catch (err) {
+      console.error("Vosk failed to load:", err);
+    }
+  })();
+}, []);
+
+
+
 
    useEffect(() => {
     if (!remoteStream || !recognizer) return;
